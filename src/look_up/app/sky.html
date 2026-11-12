@@ -1,0 +1,1088 @@
+<!doctype html>
+<!--__THIRD_PARTY_NOTICES__-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Look Up</title>
+<style>
+  :root {
+    --bg: #03050c;
+    --ink: #eef1fa;
+    --muted: #a3adc8;
+    --faint: #6f7a98;
+    --accent: #ffd27a;
+    --panel: rgba(9, 13, 26, 0.74);
+    --line: rgba(255, 255, 255, 0.09);
+    --font: var(--font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body { font: 13px/1.4 var(--font); color: var(--ink); -webkit-font-smoothing: antialiased; }
+  .card { position: relative; overflow: hidden; border-radius: 14px; background: var(--bg); }
+  .fullscreen .card { border-radius: 0; }
+  .sky { position: relative; height: 420px; touch-action: none; cursor: grab; outline: none; }
+  .sky.dragging { cursor: grabbing; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .top {
+    position: absolute; inset: 0 0 auto 0; display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px 18px; pointer-events: none;
+    background: linear-gradient(rgba(3, 5, 12, 0.72), rgba(3, 5, 12, 0));
+  }
+  .brand { display: flex; align-items: center; gap: 6px; font-weight: 650; letter-spacing: 0.01em; }
+  .brand svg { color: var(--accent); }
+  .where { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .clock { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+  button {
+    display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; flex: none;
+    color: var(--ink); background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line);
+    border-radius: 8px; cursor: pointer; pointer-events: auto; font: inherit;
+  }
+  button:hover { background: rgba(255, 255, 255, 0.13); }
+  button:focus-visible, .sky:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .turn { position: absolute; top: 50%; transform: translateY(-50%); opacity: 0.55; background: rgba(3, 5, 12, 0.35); }
+  .turn:hover { opacity: 1; }
+  .turn.left { left: 8px; }
+  .turn.right { right: 8px; }
+  .credits {
+    position: absolute; top: 48px; right: 12px; width: min(340px, calc(100% - 24px)); padding: 10px 12px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 11px; font-size: 12px; color: var(--muted);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 2;
+  }
+  .credits b { color: var(--ink); font-size: 13px; }
+  .credits p { margin: 6px 0 0; }
+  .credits a { color: var(--accent); }
+  .status { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); padding: 24px; text-align: center; }
+  .bar { padding: 10px 12px 12px; background: #060912; border-top: 1px solid var(--line); }
+  .info { min-height: 38px; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+  .info b { font-size: 14px; font-weight: 650; }
+  .info small { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .info .meta { color: var(--muted); }
+  .info .meta em { font-style: normal; color: var(--ink); }
+  .info .hint { color: var(--faint); line-height: 38px; }
+  .controls { display: flex; align-items: center; gap: 12px; }
+  .track { position: relative; flex: 1; min-width: 0; }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 8px; margin: 6px 0 0;
+    border-radius: 999px; background: var(--slider, #1a2140); cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #fff;
+    border: 3px solid var(--bg); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid var(--bg);
+  }
+  input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+  .ticks { position: relative; height: 16px; margin-top: 6px; font-size: 11px; color: var(--faint); }
+  .tick { position: absolute; top: 0; white-space: nowrap; }
+  .now {
+    position: absolute; top: -4px; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 2px #060912;
+  }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="sky" id="sky" tabindex="0" role="img" aria-label="Sky chart">
+    <canvas id="canvas"></canvas>
+    <div class="top">
+      <span class="brand">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l1.9 5.8L20 9.7l-5 3.6 1.9 5.9L12 15.6l-4.9 3.6L9 13.3 4 9.7l6.1-1.9z" fill="currentColor"/></svg>
+        Look Up
+      </span>
+      <span class="where" id="where"></span>
+      <span class="clock" id="clock"></span>
+      <button id="about" title="Credits" aria-label="Credits" aria-expanded="false" aria-controls="credits">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>
+      </button>
+      <button id="full" title="Full screen" aria-label="Full screen" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path id="full-icon" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+    </div>
+    <button class="turn left" id="left" title="Turn left" aria-label="Turn left">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <button class="turn right" id="right" title="Turn right" aria-label="Turn right">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+    <div class="credits" id="credits" role="dialog" aria-label="Credits" hidden>
+      <b>Credits</b>
+      <p>Stars and constellations: <a href="https://github.com/ofrohn/d3-celestial">d3-celestial</a> (BSD-3-Clause), from the XHIP catalog via the VizieR catalogue access tool, CDS, Strasbourg, France.</p>
+      <p>Constellation figures: IAU and Sky &amp; Telescope magazine, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, adapted.</p>
+      <p>Positions of the Sun, Moon and planets: <a href="https://github.com/cosinekitty/astronomy">Astronomy Engine</a> (MIT).</p>
+      <p>Runs on the MCP Apps SDK (MIT and Apache-2.0), Zod (MIT) and @cfworker/json-schema (MIT). Full license texts are in this view's source.</p>
+    </div>
+    <div class="status" id="status">Loading the sky…</div>
+  </div>
+  <div class="bar">
+    <div class="info" id="info" aria-live="polite"></div>
+    <div class="controls">
+      <button id="play" title="Play the night" aria-label="Play the night">
+        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path id="play-icon" d="M7 4l13 8-13 8z" fill="currentColor"/></svg>
+      </button>
+      <div class="track">
+        <input type="range" id="time" min="0" max="1" step="60000" value="0" aria-label="Time of night">
+        <div class="ticks" id="ticks"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="sr-only" id="sr" aria-live="polite"></p>
+
+<script type="application/json" id="sky-data">__SKY_DATA__</script>
+<script type="module">/*__MCP_APPS_SDK__*/</script>
+<script type="module">
+const { App, applyHostStyleVariables, applyHostFonts } = globalThis.McpApps;
+
+const SKY = JSON.parse(document.getElementById("sky-data").textContent);
+const D2R = Math.PI / 180;
+const R2D = 180 / Math.PI;
+const SIDEREAL = 360.98564736629 / 86400000; // degrees of Earth's turn per millisecond
+const $ = (id) => document.getElementById(id);
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const lerp = (a, b, f) => a + (b - a) * f;
+const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+const COMPASS_LONG = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
+const PLANET_COLORS = {
+  mercury: "#e9e2d2", venus: "#fff7df", mars: "#ff9d6e", jupiter: "#ffe6bf",
+  saturn: "#f6d99c", uranus: "#bdf2ec", neptune: "#a3bdff",
+};
+
+// ------------------------------------------------------------ catalog (J2000 unit vectors)
+
+function unit(ra, dec) {
+  const r = ra * D2R, d = dec * D2R;
+  return [Math.cos(d) * Math.cos(r), Math.cos(d) * Math.sin(r), Math.sin(d)];
+}
+
+const N_STARS = SKY.stars.length;
+const starJ = new Float64Array(N_STARS * 3);
+const starD = new Float64Array(N_STARS * 3); // of date, after precession
+const starMag = new Float32Array(N_STARS);
+const starColor = [];
+const starHip = new Int32Array(N_STARS);
+const hipIndex = new Map();
+SKY.stars.forEach(([ra, dec, mag, bv, hip], i) => {
+  const v = unit(ra, dec);
+  starJ.set(v, i * 3);
+  starMag[i] = mag;
+  starHip[i] = hip;
+  // Real star colors are subtle, so mix the catalog color halfway to white.
+  starColor.push(bvColor(bv ?? 0.6).map((c) => Math.round(c + (255 - c) * 0.4)));
+  hipIndex.set(hip, i);
+});
+
+function bvColor(bv) {
+  const stops = [[-0.3, [170, 191, 255]], [0, [214, 226, 255]], [0.4, [255, 250, 244]], [0.8, [255, 236, 210]],
+    [1.2, [255, 214, 165]], [1.8, [255, 178, 128]]];
+  if (bv <= stops[0][0]) return stops[0][1];
+  for (let i = 1; i < stops.length; i++) {
+    if (bv <= stops[i][0]) {
+      const f = (bv - stops[i - 1][0]) / (stops[i][0] - stops[i - 1][0]);
+      return stops[i - 1][1].map((c, k) => Math.round(lerp(c, stops[i][1][k], f)));
+    }
+  }
+  return stops[stops.length - 1][1];
+}
+
+const constellations = SKY.constellations.map((c) => ({
+  id: c.id, name: c.name, rank: c.rank,
+  labelJ: unit(c.label[0], c.label[1]),
+  linesJ: c.lines.map((seg) => seg.map(([ra, dec]) => unit(ra, dec))),
+}));
+
+// ------------------------------------------------------------ state
+
+const S = {
+  data: null, t: 0, facing: 180, center: 30, fov: 110, w: 0, h: 0, dpr: 1,
+  selected: null, playing: false, interacted: false, locale: navigator.language || "en",
+  displayMode: "inline", modes: ["inline"], maxHeight: 0,
+  f: [0, 1, 0], r: [1, 0, 0], u: [0, 0, 1], scale: 1,
+  hits: [], dirty: true,
+};
+
+// ------------------------------------------------------------ astronomy on the client
+
+function rotate(m, v) {
+  // Same convention as Astronomy Engine's RotateVector.
+  return [
+    m[0][0] * v[0] + m[1][0] * v[1] + m[2][0] * v[2],
+    m[0][1] * v[0] + m[1][1] * v[1] + m[2][1] * v[2],
+    m[0][2] * v[0] + m[1][2] * v[1] + m[2][2] * v[2],
+  ];
+}
+
+function prepareCatalog(m) {
+  for (let i = 0; i < N_STARS; i++) {
+    const v = rotate(m, [starJ[i * 3], starJ[i * 3 + 1], starJ[i * 3 + 2]]);
+    starD.set(v, i * 3);
+  }
+  for (const c of constellations) {
+    c.label = rotate(m, c.labelJ);
+    c.lines = c.linesJ.map((seg) => seg.map((v) => rotate(m, v)));
+  }
+  for (const mk of S.data.markers) mk.v = rotate(m, unit(mk.ra, mk.dec));
+}
+
+function frame(t) {
+  const lst = (S.data.lst0 + (t - S.data.t0) * SIDEREAL) * D2R;
+  const lat = S.data.place.lat * D2R;
+  return { c: Math.cos(lst), s: Math.sin(lst), sl: Math.sin(lat), cl: Math.cos(lat) };
+}
+
+// Equatorial (of date) unit vector -> local east/north/up, with refraction near the horizon.
+function enu(F, x, y, z, out = [0, 0, 0]) {
+  const xh = x * F.c + y * F.s;
+  const E = -x * F.s + y * F.c;
+  const N = F.cl * z - F.sl * xh;
+  const U = F.sl * z + F.cl * xh;
+  out[0] = E; out[1] = N; out[2] = U;
+  if (U < 0.27 && U > -0.03) {
+    const alt = Math.asin(U) * R2D;
+    const bend = 1.02 / Math.tan((alt + 10.3 / (alt + 5.11)) * D2R) / 60;
+    const a2 = (alt + bend) * D2R;
+    const h = Math.hypot(E, N) || 1e-9;
+    out[0] = (E / h) * Math.cos(a2); out[1] = (N / h) * Math.cos(a2); out[2] = Math.sin(a2);
+  }
+  return out;
+}
+
+function altaz(p) {
+  return [Math.asin(clamp(p[2], -1, 1)) * R2D, (Math.atan2(p[0], p[1]) * R2D + 360) % 360];
+}
+
+function bodyVector(body, t) {
+  const s = body.samples;
+  let i = 0;
+  while (i < s.length - 2 && s[i + 1][0] < t) i++;
+  const [t0, ra0, dec0] = s[i];
+  const [t1, ra1, dec1] = s[Math.min(i + 1, s.length - 1)];
+  const f = t1 > t0 ? clamp((t - t0) / (t1 - t0), 0, 1) : 0;
+  const dra = ((ra1 - ra0 + 540) % 360) - 180;
+  return rotate(S.data.precession, unit(ra0 + dra * f, lerp(dec0, dec1, f)));
+}
+
+function sunAltitude(t) {
+  const sun = S.data.bodies.find((b) => b.id === "sun");
+  return altaz(enu(frame(t), ...bodyVector(sun, t)))[0];
+}
+
+// ------------------------------------------------------------ the view
+
+function setupView() {
+  const a = S.facing * D2R, c = S.center * D2R;
+  S.f = [Math.cos(c) * Math.sin(a), Math.cos(c) * Math.cos(a), Math.sin(c)];
+  S.r = [Math.cos(a), -Math.sin(a), 0];
+  const [rx, ry, rz] = S.r, [fx, fy, fz] = S.f;
+  S.u = [ry * fz - rz * fy, rz * fx - rx * fz, rx * fy - ry * fx];
+  S.scale = S.w / 2 / (2 * Math.tan((S.fov * D2R) / 4));
+}
+
+function project(p, out) {
+  const d = p[0] * S.f[0] + p[1] * S.f[1] + p[2] * S.f[2];
+  if (d < -0.35) return false;
+  const k = (2 / (1 + d)) * S.scale;
+  out[0] = S.w / 2 + k * (p[0] * S.r[0] + p[1] * S.r[1] + p[2] * S.r[2]);
+  out[1] = S.h / 2 - k * (p[0] * S.u[0] + p[1] * S.u[1] + p[2] * S.u[2]);
+  return true;
+}
+
+function onScreen(pt, pad = 24) {
+  return pt[0] > -pad && pt[0] < S.w + pad && pt[1] > -pad && pt[1] < S.h + pad;
+}
+
+// Altitude at the middle of the screen that puts the horizon straight ahead near the bottom.
+function baseCenter() {
+  const scale = S.w / 2 / (2 * Math.tan((S.fov * D2R) / 4));
+  return 2 * Math.atan((0.18 * S.h) / scale) * R2D;
+}
+
+function halfHeightDeg() {
+  return 2 * Math.atan(S.h / 2 / (2 * S.scale)) * R2D;
+}
+
+function frameTarget(alt, extended) {
+  const base = baseCenter();
+  setupView();
+  const half = halfHeightDeg();
+  if (alt == null) { S.center = base; return; }
+  // Star patterns and constellations are big, so center them instead of just fitting them in.
+  if (extended) { S.center = clamp(alt - half * 0.25, base, 75); return; }
+  S.center = alt > base + half - 10 ? clamp(alt - half + 12, base, 75) : base;
+}
+
+// ------------------------------------------------------------ drawing
+
+const canvas = $("canvas");
+const ctx = canvas.getContext("2d");
+const glowSprite = (() => {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, "rgba(255,255,255,0.9)");
+  grad.addColorStop(0.18, "rgba(255,255,255,0.35)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return c;
+})();
+
+const SKY_KEYS = [
+  [-90, [2, 4, 10], [13, 19, 40]],
+  [-18, [2, 4, 10], [13, 19, 40]],
+  [-12, [5, 9, 24], [16, 25, 54]],
+  [-6, [10, 20, 52], [38, 56, 104]],
+  [-2, [20, 40, 88], [92, 112, 160]],
+  [2, [38, 76, 146], [150, 180, 222]],
+  [12, [44, 98, 186], [164, 200, 238]],
+  [90, [44, 98, 186], [164, 200, 238]],
+];
+
+function skyColors(sunAlt) {
+  for (let i = 1; i < SKY_KEYS.length; i++) {
+    if (sunAlt <= SKY_KEYS[i][0]) {
+      const [a0, t0, h0] = SKY_KEYS[i - 1], [a1, t1, h1] = SKY_KEYS[i];
+      const f = (sunAlt - a0) / (a1 - a0);
+      const mix = (x, y) => x.map((v, k) => Math.round(lerp(v, y[k], f)));
+      return [mix(t0, t1), mix(h0, h1)];
+    }
+  }
+  return [SKY_KEYS[SKY_KEYS.length - 1][1], SKY_KEYS[SKY_KEYS.length - 1][2]];
+}
+
+function limitingMag(sunAlt, moonUp, moonLit) {
+  const keys = [[-90, 5.6], [-18, 5.6], [-15, 4.9], [-12, 3.9], [-9, 2.6], [-6, 1.1], [-3, -0.6], [0, -1.6]];
+  let lim = -2;
+  for (let i = 1; i < keys.length; i++) {
+    if (sunAlt <= keys[i][0]) {
+      lim = lerp(keys[i - 1][1], keys[i][1], (sunAlt - keys[i - 1][0]) / (keys[i][0] - keys[i - 1][0]));
+      break;
+    }
+  }
+  if (moonUp) lim -= 1.3 * moonLit;
+  return lim;
+}
+
+const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+function draw() {
+  S.dirty = false;
+  const d = S.data;
+  ctx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+  ctx.clearRect(0, 0, S.w, S.h);
+  if (!d) return;
+  setupView();
+  const t = S.t;
+  const F = frame(t);
+  const tmp = [0, 0, 0], pt = [0, 0], pt2 = [0, 0];
+  S.hits = [];
+  const labels = [];
+
+  // Sun and Moon first: they set the sky's color and brightness.
+  const bodies = d.bodies.map((b) => {
+    const v = bodyVector(b, t);
+    const p = enu(F, v[0], v[1], v[2], [0, 0, 0]);
+    return { b, v, p, alt: altaz(p)[0], az: altaz(p)[1] };
+  });
+  const sun = bodies.find((x) => x.b.id === "sun");
+  const moon = bodies.find((x) => x.b.id === "moon");
+  const moonLit = moon.b.lit ?? 0;
+  const lim = limitingMag(sun.alt, moon.alt > 0, moonLit);
+  const highlighted = new Set(d.highlight);
+
+  // Sky gradient from the zenith to the horizon.
+  const [top, horizon] = skyColors(sun.alt);
+  const hz = horizonY();
+  const g = ctx.createLinearGradient(0, 0, 0, Math.max(hz, 1));
+  g.addColorStop(0, rgb(top));
+  g.addColorStop(1, rgb(horizon));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S.w, S.h);
+
+  // Twilight glow where the Sun is.
+  if (sun.alt > -14 && sun.alt < 6) {
+    const strength = Math.max(0, 1 - Math.abs(sun.alt + 3) / 11);
+    const sunDir = [Math.sin(sun.az * D2R), Math.cos(sun.az * D2R), 0];
+    if (project(sunDir, pt)) {
+      const rad = S.w * 0.7;
+      const glow = ctx.createRadialGradient(pt[0], pt[1], 0, pt[0], pt[1], rad);
+      glow.addColorStop(0, `rgba(255,150,90,${0.55 * strength})`);
+      glow.addColorStop(0.35, `rgba(214,110,120,${0.18 * strength})`);
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, S.w, S.h);
+    }
+  }
+
+  // Moonlight.
+  if (moon.alt > -2 && moonLit > 0.05 && project(moon.p, pt)) {
+    const rad = 60 + 220 * moonLit;
+    const glow = ctx.createRadialGradient(pt[0], pt[1], 0, pt[0], pt[1], rad);
+    glow.addColorStop(0, `rgba(190,205,255,${0.22 * moonLit})`);
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, S.w, S.h);
+  }
+
+  // Constellation lines.
+  const linesAlpha = clamp((lim - 1) / 3, 0, 1);
+  const focusCon = [...highlighted].find((id) => id.startsWith("con:"))?.slice(4);
+  if (linesAlpha > 0) {
+    for (const c of constellations) {
+      const focus = c.id === focusCon;
+      ctx.strokeStyle = focus ? `rgba(255,210,122,${0.85 * Math.max(linesAlpha, 0.6)})` : `rgba(128,156,232,${0.3 * linesAlpha})`;
+      ctx.lineWidth = focus ? 1.6 : 1;
+      ctx.beginPath();
+      for (const seg of c.lines) {
+        let pen = false;
+        for (const v of seg) {
+          enu(F, v[0], v[1], v[2], tmp);
+          if (tmp[2] < -0.15 || !project(tmp, pt)) { pen = false; continue; }
+          if (pen) ctx.lineTo(pt[0], pt[1]); else ctx.moveTo(pt[0], pt[1]);
+          pen = true;
+        }
+      }
+      ctx.stroke();
+    }
+  }
+
+  // Stars, brightest first; they're sorted by magnitude so we can stop early.
+  const starLimit = lim + 0.6;
+  for (let i = 0; i < N_STARS; i++) {
+    const mag = starMag[i];
+    if (mag > starLimit) break;
+    enu(F, starD[i * 3], starD[i * 3 + 1], starD[i * 3 + 2], tmp);
+    if (tmp[2] < -0.005 || !project(tmp, pt) || !onScreen(pt, 4)) continue;
+    const alpha = clamp((starLimit - mag) / 1.4, 0.08, 1);
+    const r = clamp(0.55 + (lim + 1 - mag) * 0.42, 0.5, 4.2);
+    const col = starColor[i];
+    if (mag < 1.6 && alpha > 0.4) {
+      const s = r * 7;
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.drawImage(glowSprite, pt[0] - s / 2, pt[1] - s / 2, s, s);
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = rgb(col, alpha);
+    ctx.beginPath();
+    ctx.arc(pt[0], pt[1], r, 0, Math.PI * 2);
+    ctx.fill();
+    const id = `hip:${starHip[i]}`;
+    const name = SKY.names[starHip[i]];
+    S.hits.push({ id, x: pt[0], y: pt[1], r: r + 6, kind: "star", i });
+    if (highlighted.has(id)) labels.push({ prio: id === d.highlight[0] ? 0 : 1, id, text: name ? name[0] : "", x: pt[0], y: pt[1], r, color: "#ffd27a", ring: true });
+    else if (name && mag < 1.3 && alpha > 0.5) labels.push({ prio: 4, id, text: name[0], x: pt[0], y: pt[1], r, color: "rgba(230,236,252,0.8)" });
+    else if (name && mag < 2.1 && alpha > 0.6) labels.push({ prio: 6, id, text: name[0], x: pt[0], y: pt[1], r, color: "rgba(196,206,232,0.55)", small: false });
+  }
+
+  // Constellation names.
+  if (linesAlpha > 0.2) {
+    for (const c of constellations) {
+      if (c.rank > (S.fov < 75 ? 2 : 1) && c.id !== focusCon) continue;
+      enu(F, c.label[0], c.label[1], c.label[2], tmp);
+      if (tmp[2] < 0.05 || !project(tmp, pt) || !onScreen(pt, -10)) continue;
+      labels.push({ prio: c.id === focusCon ? 1 : 5, text: c.name.toUpperCase(), x: pt[0], y: pt[1], r: 0, center: true,
+        color: c.id === focusCon ? "rgba(255,210,122,0.95)" : `rgba(150,174,236,${0.5 * linesAlpha})`, small: true });
+    }
+  }
+
+  // Markers for sights that aren't a single star (clusters, galaxies, star patterns).
+  for (const mk of d.markers) {
+    enu(F, mk.v[0], mk.v[1], mk.v[2], tmp);
+    if (tmp[2] < -0.005 || !project(tmp, pt) || !onScreen(pt)) continue;
+    if (mk.kind === "constellation") {
+      S.hits.push({ id: mk.id, x: pt[0], y: pt[1], r: 30, kind: "marker", mk });
+      continue;
+    }
+    ctx.strokeStyle = "rgba(255,210,122,0.9)";
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.arc(pt[0], pt[1], 13, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    S.hits.push({ id: mk.id, x: pt[0], y: pt[1], r: 16, kind: "marker", mk });
+    labels.push({ prio: mk.id === d.highlight[0] ? 0 : 1, id: mk.id, text: mk.name, x: pt[0], y: pt[1], r: 12, color: "#ffd27a" });
+  }
+
+  // Planets, the Moon and the Sun.
+  for (const x of bodies) {
+    const { b, p } = x;
+    if (p[2] < -0.005 || !project(p, pt) || !onScreen(pt)) continue;
+    if (b.kind === "sun") {
+      const s = 90;
+      ctx.globalAlpha = 0.9;
+      ctx.drawImage(glowSprite, pt[0] - s / 2, pt[1] - s / 2, s, s);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#fff4d6";
+      ctx.beginPath();
+      ctx.arc(pt[0], pt[1], 9, 0, Math.PI * 2);
+      ctx.fill();
+      S.hits.push({ id: "sun", x: pt[0], y: pt[1], r: 14, kind: "sun", body: x });
+      continue;
+    }
+    if (b.kind === "moon") {
+      const toward = sunward(x.v, sun.v);
+      const q = enu(F, toward[0], toward[1], toward[2], [0, 0, 0]);
+      let angle = 0;
+      if (project(q, pt2)) angle = Math.atan2(pt2[1] - pt[1], pt2[0] - pt[0]);
+      drawMoon(pt[0], pt[1], 9, moonLit, angle);
+      S.hits.push({ id: "moon", x: pt[0], y: pt[1], r: 15, kind: "moon", body: x });
+      labels.push({ prio: highlighted.has("moon") ? 1 : 2, id: "moon", text: "Moon", x: pt[0], y: pt[1], r: 10, color: "#e7ebf7", ring: highlighted.has("moon") });
+      continue;
+    }
+    const faint = b.id === "uranus" || b.id === "neptune";
+    if (faint && !highlighted.has(b.id) && lim < 5) continue;
+    if (!faint && b.mag > lim + 0.6 && !highlighted.has(b.id)) continue;
+    const r = faint ? 1.6 : clamp(2.4 + (1.2 - b.mag) * 0.55, 2.2, 5.2);
+    const col = PLANET_COLORS[b.id];
+    ctx.globalAlpha = 0.6;
+    ctx.drawImage(glowSprite, pt[0] - r * 4, pt[1] - r * 4, r * 8, r * 8);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(pt[0], pt[1], r, 0, Math.PI * 2);
+    ctx.fill();
+    S.hits.push({ id: b.id, x: pt[0], y: pt[1], r: r + 9, kind: "planet", body: x });
+    if (!faint || highlighted.has(b.id)) {
+      labels.push({ prio: b.id === d.highlight[0] ? 0 : highlighted.has(b.id) ? 1 : 2, id: b.id, text: b.name, x: pt[0], y: pt[1], r, color: "#ffd27a", bold: true, ring: highlighted.has(b.id) });
+    }
+  }
+
+  drawGround(sun.alt);
+  drawLabels(labels);
+  drawSelection();
+}
+
+function sunward(moonV, sunV) {
+  const dot = moonV[0] * sunV[0] + moonV[1] * sunV[1] + moonV[2] * sunV[2];
+  const dir = [sunV[0] - dot * moonV[0], sunV[1] - dot * moonV[1], sunV[2] - dot * moonV[2]];
+  const len = Math.hypot(...dir) || 1;
+  const v = moonV.map((c, k) => c + (0.02 * dir[k]) / len);
+  const n = Math.hypot(...v);
+  return v.map((c) => c / n);
+}
+
+function drawMoon(x, y, R, lit, angle) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = "rgba(52,58,78,0.95)";
+  ctx.beginPath();
+  ctx.arc(0, 0, R, 0, Math.PI * 2);
+  ctx.fill();
+  if (lit > 0.01) {
+    const k = 1 - 2 * lit;
+    ctx.fillStyle = "#f3efe2";
+    ctx.beginPath();
+    ctx.arc(0, 0, R, -Math.PI / 2, Math.PI / 2, false);
+    ctx.ellipse(0, 0, Math.abs(k) * R, R, 0, Math.PI / 2, -Math.PI / 2, k > 0);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function horizonY() {
+  const pt = [0, 0];
+  const a = S.facing * D2R;
+  return project([Math.sin(a), Math.cos(a), 0], pt) ? pt[1] : S.h;
+}
+
+function drawGround(sunAlt) {
+  const pts = [];
+  const pt = [0, 0];
+  for (let k = -110; k <= 110; k += 2) {
+    const az = (S.facing + k) * D2R;
+    if (project([Math.sin(az), Math.cos(az), 0], pt)) pts.push([pt[0], pt[1]]);
+  }
+  if (pts.length < 2) return;
+  const day = clamp((sunAlt + 6) / 12, 0, 1);
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (const p of pts) ctx.lineTo(p[0], p[1]);
+  ctx.lineTo(S.w + 50, S.h + 50);
+  ctx.lineTo(-50, S.h + 50);
+  ctx.closePath();
+  const hz = horizonY();
+  const g = ctx.createLinearGradient(0, hz, 0, S.h);
+  g.addColorStop(0, rgb([Math.round(lerp(5, 30, day)), Math.round(lerp(7, 36, day)), Math.round(lerp(11, 32, day))]));
+  g.addColorStop(1, rgb([Math.round(lerp(1, 14, day)), Math.round(lerp(2, 17, day)), Math.round(lerp(4, 16, day))]));
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.14)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (const p of pts) ctx.lineTo(p[0], p[1]);
+  ctx.stroke();
+
+  // Compass points sit just under the horizon.
+  ctx.font = `600 11px ${getComputedStyle(document.body).fontFamily}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  for (let k = 0; k < 8; k++) {
+    const az = k * 45 * D2R;
+    const p = [Math.sin(az) * Math.cos(-2 * D2R), Math.cos(az) * Math.cos(-2 * D2R), Math.sin(-2 * D2R)];
+    if (!project(p, pt) || !onScreen(pt, -8)) continue;
+    ctx.fillStyle = k % 2 === 0 ? "rgba(238,241,250,0.85)" : "rgba(163,173,200,0.7)";
+    ctx.fillText(COMPASS[k], pt[0], pt[1]);
+  }
+}
+
+function drawLabels(labels) {
+  labels.sort((a, b) => a.prio - b.prio);
+  // Keep labels out from under the title bar.
+  const taken = [[0, 0, S.w, 40]];
+  const family = getComputedStyle(document.body).fontFamily;
+  for (const L of labels) {
+    if (!L.text || L.x < 0 || L.x > S.w || L.y < 0 || L.y > S.h) continue;
+    ctx.font = `${L.bold ? 600 : L.small ? 600 : 500} ${L.small ? 10 : 12}px ${family}`;
+    const w = ctx.measureText(L.text).width + (L.small ? L.text.length * 1.2 : 0);
+    const gap = L.r + (L.ring ? 11 : 6);
+    // Put the label on the left of its object when it would run off the right edge.
+    const x = L.center ? L.x - w / 2 : L.x + gap + w > S.w - 4 ? L.x - gap - w : L.x + gap;
+    const y = L.center ? L.y - 6 : L.y - 7;
+    const box = [x - 2, y - 2, x + w + 2, y + 14];
+    if (box[2] < 0 || box[0] > S.w || box[3] < 0 || box[1] > S.h) continue;
+    if (taken.some((b) => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]))) continue;
+    taken.push(box);
+    if (L.ring && L.id !== S.selected) {
+      ctx.strokeStyle = "rgba(255,210,122,0.85)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(L.x, L.y, L.r + 6, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    if (L.small) ctx.letterSpacing = "1.2px";
+    ctx.fillStyle = "rgba(2,4,10,0.65)";
+    ctx.fillText(L.text, x + 1, y + 1);
+    ctx.fillStyle = L.color;
+    ctx.fillText(L.text, x, y);
+    if (L.small) ctx.letterSpacing = "0px";
+  }
+}
+
+function drawSelection() {
+  if (!S.selected) return;
+  const hit = S.hits.find((h) => h.id === S.selected);
+  if (!hit) return;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(hit.x, hit.y, Math.max(hit.r, 10) + 2, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+// ------------------------------------------------------------ text for the info card and clock
+
+// The view's words are English, so dates are too; the 12- or 24-hour clock follows the person's locale.
+function hour12() {
+  try { return new Intl.DateTimeFormat(S.locale, { hour: "numeric" }).resolvedOptions().hour12 ?? false; }
+  catch { return false; }
+}
+
+function fmtTime(t) {
+  const h12 = hour12();
+  return new Intl.DateTimeFormat(h12 ? "en-US" : "en-GB", {
+    timeZone: S.data.place.tz, hour: "numeric", minute: "2-digit", hour12: h12,
+  }).format(t);
+}
+
+function fmtDay(t) {
+  return new Intl.DateTimeFormat("en-US", { timeZone: S.data.place.tz, weekday: "short", day: "numeric", month: "short" }).format(t);
+}
+
+function fists(alt) {
+  const halves = Math.round(alt / 5);
+  if (alt < 3) return "on the horizon";
+  if (halves < 2) return "half a fist up";
+  const whole = Math.floor(halves / 2);
+  return `${whole}${halves % 2 ? "½" : ""} fist${halves > 2 ? "s" : ""} up`;
+}
+
+function describe(hit) {
+  const F = frame(S.t);
+  let p, title, sub = "", mag = null, note = S.data.notes[hit.id] || "";
+  if (hit.kind === "star") {
+    const i = hit.i;
+    p = enu(F, starD[i * 3], starD[i * 3 + 1], starD[i * 3 + 2]);
+    const name = SKY.names[starHip[i]];
+    title = name ? name[0] : `HIP ${starHip[i]}`;
+    sub = name && name[1] ? name[1] : "star";
+    mag = starMag[i];
+  } else if (hit.kind === "marker") {
+    p = enu(F, ...hit.mk.v);
+    title = hit.mk.name;
+    sub = hit.mk.kind === "asterism" ? "star pattern" : hit.mk.kind;
+    const stars = (hit.mk.stars || []).map((id) => SKY.names[id.slice(4)]?.[0]).filter(Boolean);
+    if (!note && stars.length) note = `Look for ${stars.slice(0, 3).join(", ")}`;
+  } else {
+    p = hit.body.p;
+    title = hit.body.b.name;
+    if (hit.kind === "moon") sub = `${Math.round((hit.body.b.lit ?? 0) * 100)}% lit`;
+    else if (hit.kind === "planet") { sub = "planet"; mag = hit.body.b.mag; }
+    else sub = "never look straight at it";
+  }
+  const [alt, az] = altaz(p);
+  const dir = COMPASS_LONG[Math.round(az / 45) % 8];
+  const where = alt > 0 ? `${dir} · ${Math.round(alt)}° up (${fists(alt)})` : `below the horizon, ${dir}`;
+  return { title, sub, where, mag, note };
+}
+
+function showInfo() {
+  const box = $("info");
+  box.innerHTML = "";
+  const hit = S.selected && S.hits.find((h) => h.id === S.selected);
+  if (!hit) {
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent = S.data ? "Tap a star or planet for details · drag to look around" : "";
+    box.appendChild(hint);
+    return;
+  }
+  const { title, sub, where, mag, note } = describe(hit);
+  const head = document.createElement("div");
+  const b = document.createElement("b");
+  b.textContent = title;
+  head.appendChild(b);
+  if (sub) { const s = document.createElement("small"); s.textContent = sub; head.appendChild(s); }
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.textContent = where + (mag != null ? ` · magnitude ${mag.toFixed(1)}` : "") + (note ? " · " : "");
+  if (note) { const em = document.createElement("em"); em.textContent = note; meta.appendChild(em); }
+  box.append(head, meta);
+}
+
+function updateText() {
+  if (!S.data) return;
+  $("clock").textContent = `${fmtDay(S.t)} · ${fmtTime(S.t)}`;
+  const up = S.hits.filter((h) => h.kind === "planet" || h.kind === "moon").map((h) => describe(h)).filter((x) => !x.where.startsWith("below"));
+  const facing = COMPASS_LONG[Math.round(S.facing / 45) % 8];
+  const text = `Sky from ${S.data.place.name} at ${fmtTime(S.t)}, facing ${facing}. ` +
+    (up.length ? up.map((x) => `${x.title}: ${x.where}.`).join(" ") : "No planets in view.");
+  $("sky").setAttribute("aria-label", text);
+}
+
+// ------------------------------------------------------------ render loop
+
+let frameRequested = false;
+function requestDraw() {
+  if (frameRequested) return;
+  frameRequested = true;
+  requestAnimationFrame(() => {
+    frameRequested = false;
+    draw();
+    showInfo();
+    updateText();
+  });
+}
+
+function resize() {
+  const width = $("card").clientWidth || document.documentElement.clientWidth || 600;
+  const barH = document.querySelector(".bar").offsetHeight || 56;
+  let height;
+  if (S.displayMode === "fullscreen") height = Math.max(240, window.innerHeight - barH);
+  else {
+    height = clamp(Math.round(width * 0.6), 300, 460);
+    if (S.maxHeight) height = Math.min(height, Math.max(240, S.maxHeight - barH));
+  }
+  $("sky").style.height = `${height}px`;
+  S.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  S.w = width;
+  S.h = height;
+  canvas.width = Math.round(width * S.dpr);
+  canvas.height = Math.round(height * S.dpr);
+  S.fov = S.displayMode === "fullscreen" ? 120 : width < 480 ? 100 : 110;
+  const base = baseCenter();
+  if (S.center < base) S.center = base;
+  requestDraw();
+}
+
+new ResizeObserver(() => resize()).observe($("card"));
+window.addEventListener("resize", resize);
+
+// ------------------------------------------------------------ time slider
+
+function buildSlider() {
+  const d = S.data;
+  const [start, end] = d.range.map((x) => Date.parse(x));
+  const slider = $("time");
+  slider.min = String(start);
+  slider.max = String(end);
+  slider.value = String(S.t);
+
+  const stops = [];
+  for (let k = 0; k <= 40; k++) {
+    const t = start + ((end - start) * k) / 40;
+    const [top] = skyColors(sunAltitude(t));
+    const c = top.map((v) => Math.min(255, Math.round(v * 1.6 + 14)));
+    stops.push(`${rgb(c)} ${(k / 40) * 100}%`);
+  }
+  slider.style.setProperty("--slider", `linear-gradient(90deg, ${stops.join(", ")})`);
+
+  const ticks = $("ticks");
+  ticks.innerHTML = "";
+  const names = { sunset: "Sunset", dusk: "Dark", dawn: "Dawn", sunrise: "Sunrise" };
+  const order = ["sunset", "sunrise", "dusk", "dawn"];
+  const width = ticks.clientWidth;
+  const placed = [];
+  for (const ev of [...d.events].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))) {
+    const t = Date.parse(ev.time);
+    const f = (t - start) / (end - start);
+    if (f < 0 || f > 1) continue;
+    const el = document.createElement("span");
+    el.className = "tick";
+    el.textContent = `${names[ev.kind]} ${fmtTime(t)}`;
+    ticks.appendChild(el);
+    const w = el.offsetWidth;
+    const left = clamp(f * width - w / 2, 0, Math.max(0, width - w));
+    if (placed.some(([a, b]) => left < b + 10 && left + w > a - 10)) { el.remove(); continue; }
+    placed.push([left, left + w]);
+    el.style.left = `${left}px`;
+  }
+  const now = Date.now();
+  if (now > start && now < end) {
+    const el = document.createElement("span");
+    el.className = "now";
+    el.title = "Now";
+    el.style.left = `${((now - start) / (end - start)) * 100}%`;
+    ticks.appendChild(el);
+  }
+}
+
+$("time").addEventListener("input", (e) => {
+  S.t = Number(e.target.value);
+  stopPlaying();
+  requestDraw();
+});
+
+let lastTick = 0;
+function playStep(ts) {
+  if (!S.playing) return;
+  const [start, end] = S.data.range.map((x) => Date.parse(x));
+  const dt = lastTick ? ts - lastTick : 16;
+  lastTick = ts;
+  S.t += ((end - start) / 14000) * dt;
+  if (S.t >= end) { S.t = end; stopPlaying(); }
+  $("time").value = String(S.t);
+  requestDraw();
+  if (S.playing) requestAnimationFrame(playStep);
+}
+
+function startPlaying() {
+  if (!S.data) return;
+  const [start, end] = S.data.range.map((x) => Date.parse(x));
+  if (S.t >= end - 60000) S.t = start;
+  S.playing = true;
+  lastTick = 0;
+  $("play-icon").setAttribute("d", "M7 4h3.5v16H7zM13.5 4H17v16h-3.5z");
+  $("play").setAttribute("aria-label", "Pause");
+  requestAnimationFrame(playStep);
+}
+
+function stopPlaying() {
+  S.playing = false;
+  $("play-icon").setAttribute("d", "M7 4l13 8-13 8z");
+  $("play").setAttribute("aria-label", "Play the night");
+}
+
+$("play").addEventListener("click", () => (S.playing ? stopPlaying() : startPlaying()));
+
+// ------------------------------------------------------------ looking around
+
+const sky = $("sky");
+const pointers = new Map();
+let drag = null;
+
+function dismissHint() {
+  S.interacted = true;
+}
+
+sky.addEventListener("pointerdown", (e) => {
+  if (e.target.closest("button, .credits")) return;
+  sky.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY, facing: S.facing, center: S.center, moved: 0 };
+  else drag = { pinch: dist(), fov: S.fov, moved: 99 };
+});
+
+function dist() {
+  const [a, b] = [...pointers.values()];
+  return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+sky.addEventListener("pointermove", (e) => {
+  if (!pointers.has(e.pointerId) || !drag) return;
+  pointers.set(e.pointerId, [e.clientX, e.clientY]);
+  if (drag.pinch && pointers.size === 2) {
+    S.fov = clamp(drag.fov * (drag.pinch / dist()), 40, 140);
+  } else if (!drag.pinch) {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag.moved = Math.max(drag.moved, Math.hypot(dx, dy));
+    if (drag.moved < 4) return;
+    sky.classList.add("dragging");
+    const degPerPx = S.fov / S.w;
+    S.facing = (drag.facing - dx * degPerPx + 360) % 360;
+    S.center = clamp(drag.center + dy * degPerPx, baseCenter() - 8, 75);
+    dismissHint();
+  }
+  requestDraw();
+});
+
+function endPointer(e) {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  sky.classList.remove("dragging");
+  if (drag && !drag.pinch && drag.moved < 5) select(e);
+  drag = pointers.size === 1 ? { x: [...pointers.values()][0][0], y: [...pointers.values()][0][1], facing: S.facing, center: S.center, moved: 99 } : null;
+}
+sky.addEventListener("pointerup", endPointer);
+sky.addEventListener("pointercancel", endPointer);
+
+function select(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  let best = null, bestD = Infinity;
+  for (const h of S.hits) {
+    const d = Math.hypot(h.x - x, h.y - y);
+    const reach = Math.max(h.r, 12);
+    const weight = h.kind === "star" ? 1 : 0.6;
+    if (d <= reach && d * weight < bestD) { best = h; bestD = d * weight; }
+  }
+  S.selected = best ? best.id : null;
+  dismissHint();
+  requestDraw();
+}
+
+sky.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  S.fov = clamp(S.fov * Math.exp(e.deltaY * 0.0012), 40, 140);
+  dismissHint();
+  requestDraw();
+}, { passive: false });
+
+function turn(deg) {
+  S.facing = (S.facing + deg + 360) % 360;
+  dismissHint();
+  requestDraw();
+}
+$("left").addEventListener("click", () => turn(-30));
+$("right").addEventListener("click", () => turn(30));
+
+sky.addEventListener("keydown", (e) => {
+  const actions = {
+    ArrowLeft: () => turn(-15), ArrowRight: () => turn(15),
+    ArrowUp: () => { S.center = clamp(S.center + 5, baseCenter() - 8, 75); requestDraw(); },
+    ArrowDown: () => { S.center = clamp(S.center - 5, baseCenter() - 8, 75); requestDraw(); },
+    "+": () => { S.fov = clamp(S.fov / 1.15, 40, 140); requestDraw(); },
+    "-": () => { S.fov = clamp(S.fov * 1.15, 40, 140); requestDraw(); },
+    " ": () => (S.playing ? stopPlaying() : startPlaying()),
+  };
+  if (actions[e.key]) { e.preventDefault(); actions[e.key](); }
+});
+
+// ------------------------------------------------------------ host connection
+
+const app = new App({ name: "Look Up", version: "0.1.0" });
+
+function applyContext(ctx) {
+  if (!ctx) return;
+  try {
+    if (ctx.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
+    if (ctx.styles?.css?.fonts) applyHostFonts(ctx.styles.css.fonts);
+  } catch { /* host styles are optional */ }
+  if (ctx.locale) S.locale = ctx.locale;
+  if (ctx.availableDisplayModes) S.modes = ctx.availableDisplayModes;
+  if (ctx.displayMode) S.displayMode = ctx.displayMode;
+  S.maxHeight = ctx.containerDimensions?.maxHeight || ctx.containerDimensions?.height || 0;
+  document.body.classList.toggle("fullscreen", S.displayMode === "fullscreen");
+  $("full").hidden = !S.modes.includes("fullscreen");
+  $("full-icon").setAttribute("d", S.displayMode === "fullscreen"
+    ? "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" : "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5");
+  $("full").setAttribute("aria-label", S.displayMode === "fullscreen" ? "Exit full screen" : "Full screen");
+  resize();
+}
+
+$("about").addEventListener("click", () => {
+  const panel = $("credits");
+  panel.hidden = !panel.hidden;
+  $("about").setAttribute("aria-expanded", String(!panel.hidden));
+});
+
+// Links open through the host, since the view runs in a sandbox.
+$("credits").addEventListener("click", (e) => {
+  const link = e.target.closest("a");
+  if (!link) return;
+  e.preventDefault();
+  app.openLink({ url: link.href }).catch(() => {});
+});
+
+$("full").addEventListener("click", async () => {
+  const mode = S.displayMode === "fullscreen" ? "inline" : "fullscreen";
+  try {
+    const result = await app.requestDisplayMode({ mode });
+    applyContext({ ...app.getHostContext(), displayMode: result?.mode || mode });
+  } catch { /* the host said no */ }
+});
+
+function show(data) {
+  S.data = data;
+  data.markers = data.markers || [];
+  prepareCatalog(data.precession);
+  S.t = Date.parse(data.time);
+  S.facing = data.facing;
+  S.selected = data.highlight[0] || null;
+  $("where").textContent = data.place.name;
+  $("status").hidden = true;
+  resize();
+  const main = data.markers.find((m) => m.id === data.highlight[0]);
+  frameTarget(data.focusAlt, main && (main.kind === "constellation" || main.kind === "asterism"));
+  buildSlider();
+  requestDraw();
+}
+
+function showError(message) {
+  $("status").hidden = false;
+  $("status").textContent = message;
+}
+
+app.ontoolinput = (params) => {
+  const place = params?.arguments?.place;
+  if (place) $("where").textContent = place;
+};
+
+app.ontoolresult = (result) => {
+  if (result?.isError) {
+    const text = (result.content || []).map((c) => c.text || "").join(" ").trim();
+    showError(text || "Look Up couldn't work that out.");
+    return;
+  }
+  if (!result?.structuredContent?.bodies) {
+    showError("This view needs sky data from Look Up.");
+    return;
+  }
+  show(result.structuredContent);
+};
+
+app.ontoolcancelled = () => showError("Cancelled.");
+app.onteardown = async () => ({});
+app.addEventListener("hostcontextchanged", () => applyContext(app.getHostContext()));
+
+resize();
+const noHost = setTimeout(() => { if (!S.data) showError("Open this view from Look Up in Claude."); }, 5000);
+try {
+  await app.connect();
+  applyContext(app.getHostContext());
+} catch (error) {
+  clearTimeout(noHost);
+  showError("Open this view from Look Up in Claude.");
+  console.error(error);
+}
+</script>
+</body>
+</html>
