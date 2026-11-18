@@ -10,4 +10,4 @@ def test_main_serves_mcp_and_pages():
     spec.loader.exec_module(entry)
 
     paths = {getattr(route, "path", None) for route in entry.app.routes}
-    assert {"/mcp", "/", "/privacy", "/licenses", "/demo", "/health"} <= paths
+    assert {"/mcp", "/", "/privacy", "/licenses", "/demo", "/health", "/icon.png"} <= paths

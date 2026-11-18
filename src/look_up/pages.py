@@ -101,7 +101,7 @@ def privacy() -> HTMLResponse:
         "Look Up privacy policy",
         f"""
 <h1>Privacy policy</h1>
-<p>Last updated 8 November 2026.</p>
+<p>Last updated 18 November 2026.</p>
 
 <h2>What Look Up receives</h2>
 <p>When Claude uses Look Up, it sends the inputs of the tool it calls: a latitude and longitude, a time zone, an
@@ -113,7 +113,7 @@ Look Up never receives your conversation, your name, or your account details.</p
 
 <h2>What's kept</h2>
 <p>Look Up doesn't store tool inputs or answers, and it uses no cookies, analytics or trackers. The hosting
-provider may keep standard request logs (such as IP address and time) for a short period to run and protect
+provider (Vercel) may keep standard request logs (such as IP address and time) for a short period to run and protect
 the service.</p>
 
 <h2>Sharing</h2>
@@ -331,7 +331,7 @@ def _origin(request: Request) -> str:
 
 
 def register(mcp: FastMCP) -> None:
-    from .server import app_html
+    from .server import ICON_FILE, app_html
 
     @mcp.custom_route("/", methods=["GET"], include_in_schema=False)
     async def home(request: Request) -> Response:
@@ -344,6 +344,12 @@ def register(mcp: FastMCP) -> None:
     @mcp.custom_route("/licenses", methods=["GET"], include_in_schema=False)
     async def licenses_page(request: Request) -> Response:
         return licenses()
+
+    @mcp.custom_route("/icon.png", methods=["GET"], include_in_schema=False)
+    async def icon(request: Request) -> Response:
+        return Response(
+            ICON_FILE.read_bytes(), media_type="image/png", headers={"cache-control": "public, max-age=86400"}
+        )
 
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(request: Request) -> Response:

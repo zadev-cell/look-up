@@ -74,6 +74,12 @@ async def test_web_pages():
         assert call.json()["structuredContent"]["view"] == "find"
         refused = await http.post("/demo/call", json={"name": "meteor_showers", "arguments": {}})
         assert refused.status_code == 400
+        icon = await http.get("/icon.png")
+        assert icon.headers["content-type"] == "image/png" and icon.content.startswith(b"\x89PNG")
+
+
+def test_server_has_an_icon_for_claude():
+    assert [icon.src for icon in mcp.icons] == ["https://look-up-three.vercel.app/icon.png"]
 
 
 def test_every_served_view_carries_the_licenses():

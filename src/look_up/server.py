@@ -18,7 +18,7 @@ from fastmcp import FastMCP
 from fastmcp.apps import AppConfig
 from fastmcp.exceptions import ToolError
 from fastmcp.tools import ToolResult
-from mcp.types import ToolAnnotations
+from mcp.types import Icon, ToolAnnotations
 from pydantic import Field
 
 from . import __version__, sky, words
@@ -28,10 +28,14 @@ VIEW_URI = "ui://look-up/sky.html"
 APP_DIR = Path(__file__).parent / "app"
 SDK_FILE = APP_DIR / "vendor" / "ext-apps-2.0.3.js"
 NOTICES_FILE = Path(__file__).parent / "THIRD_PARTY_NOTICES.txt"
+ICON_FILE = APP_DIR / "icon.png"
+SITE = "https://look-up-three.vercel.app"
 
 mcp = FastMCP(
     "Look Up",
     version=__version__,
+    website_url=SITE,
+    icons=[Icon(src=f"{SITE}/icon.png", mime_type="image/png", sizes=["512x512"])],
     instructions=(
         "Look Up answers questions about the night sky for any place and time: what's visible tonight, "
         "where to find a planet, star, constellation or the Moon, what a bright light in the sky is, and "

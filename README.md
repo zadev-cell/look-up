@@ -41,14 +41,25 @@ while you edit `src/look_up/app/sky.html`. `uv run look-up stdio` serves local M
 
 ## Use it in Claude
 
-Claude connects to remote servers, so the server needs a public https URL. In Claude, open
-**Customize → Connectors → Add custom connector** and paste `https://<your host>/mcp`.
+In Claude, open **Customize → Connectors → Add custom connector** and paste:
 
-- Quick test from your laptop: `cloudflared tunnel --url http://localhost:8000 --http-host-header localhost:8000`
-  and use the `trycloudflare.com` URL it prints. (The host header flag keeps FastMCP's DNS-rebinding guard happy.)
-- Hosting: [Prefect Horizon](https://gofastmcp.com/deployment/prefect-horizon) runs FastMCP servers from a GitHub
-  repo for free (entrypoint `main.py:mcp`). Any host that runs `uv run look-up` with `HOST=0.0.0.0` and `PORT`
-  works too.
+```
+https://look-up-three.vercel.app/mcp
+```
+
+No account or sign-in needed. You can also try the chart in a browser at
+[look-up-three.vercel.app/demo](https://look-up-three.vercel.app/demo).
+
+Questions or problems: [open an issue](https://github.com/zadev-cell/look-up/issues).
+
+## Host your own
+
+The public server runs on [Vercel](https://vercel.com): import the repo and deploy, nothing to configure. Vercel
+serves the `app` in `main.py` (the MCP endpoint plus the web pages, in stateless mode). Any host that runs
+`uv run look-up` with `HOST=0.0.0.0` and `PORT` works too.
+
+For a quick test from your laptop: `cloudflared tunnel --url http://localhost:8000 --http-host-header localhost:8000`
+and use the `trycloudflare.com` URL it prints. (The host header flag keeps FastMCP's DNS-rebinding guard happy.)
 
 ## Tests
 
